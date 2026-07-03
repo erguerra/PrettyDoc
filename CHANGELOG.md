@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-03
+
+### Changed
+
+- Release builds are now **signed with a Developer ID and notarized by Apple**,
+  so downloads open without Gatekeeper warnings.
+
 ## [0.1.0] - 2026-07-03
 
 Initial public release.
@@ -28,5 +35,6 @@ Initial public release.
   deep-links, stdin streaming) and a `prettydoc://` URL scheme.
 - Copy buttons on code blocks; Reveal in Finder and Open in Editor actions.
 
-[Unreleased]: https://github.com/erguerra/PrettyDoc/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/erguerra/PrettyDoc/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/erguerra/PrettyDoc/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/erguerra/PrettyDoc/releases/tag/v0.1.0
