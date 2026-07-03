@@ -1,0 +1,36 @@
+name: PrettyDoc
+options:
+  bundleIdPrefix: com.eduardoguerra
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+
+targets:
+  PrettyDoc:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: App
+        excludes:
+          - "Resources/web"
+      - path: App/Resources/web
+        type: folder
+    settings:
+      base:
+        PRODUCT_NAME: "Pretty Doc"
+        PRODUCT_BUNDLE_IDENTIFIER: com.eduardoguerra.prettydoc
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_HARDENED_RUNTIME: NO
+        SWIFT_EMIT_LOC_STRINGS: YES

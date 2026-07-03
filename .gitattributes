@@ -1,0 +1,21 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Keep shell scripts as LF regardless of platform
+Scripts/prettydoc text eol=lf
+*.sh text eol=lf
+
+# Vendored browser libraries: exclude from language stats and diffs
+App/Resources/web/vendor/** linguist-vendored
+*.min.js linguist-vendored
+*.min.css linguist-vendored
+
+# Generated Xcode project (should not normally be committed)
+*.pbxproj linguist-generated
+
+# Binary assets
+*.png binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

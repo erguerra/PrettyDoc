@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+
+# XcodeGen generates the project; keep project.yml as source of truth.
+PrettyDoc.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Node (only used to vendor JS libs into App/Resources/web)
+node_modules/
+package-lock.json
+
+# Distribution artifacts
+*.dmg
+*.zip
+dist/
