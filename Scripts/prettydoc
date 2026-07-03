@@ -1,0 +1,130 @@
+#!/bin/bash
+# Pretty Doc command-line launcher.
+#
+# Opens Markdown files in the Pretty Doc app. For plain file opens it uses
+# `open -a`; when you pass flags, a #anchor, or pipe via stdin it drives the app
+# through the prettydoc:// URL scheme (which works even when the app is running).
+#
+# Usage:
+#   prettydoc [options] <file.md> [more.md ...]
+#   prettydoc plan.md#some-heading          # scroll to a heading
+#   some-agent | prettydoc -                # stream stdin (implies --follow)
+#
+# Options:
+#   -n, --new-window     Prefer a new window
+#       --reuse          Reuse the current tab instead of opening a new one
+#       --anchor <slug>  Scroll to the heading with this id/slug
+#       --line <n>       (reserved) approximate source line
+#       --theme <name>   light | dark | sepia | system
+#       --follow         Auto-scroll to the bottom as the file grows
+#   -h, --help           Show this help
+set -euo pipefail
+
+APP="Pretty Doc"
+
+print_help() {
+	sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+abspath() {
+	local p="$1"
+	if [[ "$p" = /* ]]; then printf '%s' "$p"; else printf '%s/%s' "$PWD" "$p"; fi
+}
+
+urlencode() {
+	if command -v python3 >/dev/null 2>&1; then
+		python3 -c 'import sys,urllib.parse;sys.stdout.write(urllib.parse.quote(sys.argv[1],safe=""))' "$1"
+	else
+		local s="$1" out="" c i
+		for (( i=0; i<${#s}; i++ )); do
+			c="${s:$i:1}"
+			case "$c" in
+				[a-zA-Z0-9._~-]) out+="$c" ;;
+				*) out+=$(printf '%%%02X' "'$c") ;;
+			esac
+		done
+		printf '%s' "$out"
+	fi
+}
+
+tab=""
+window=""
+anchor=""
+line=""
+theme=""
+follow=""
+stdin_mode=0
+paths=()
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-h|--help) print_help; exit 0 ;;
+		-n|--new-window) window="new" ;;
+		--reuse) tab="reuse" ;;
+		--anchor) anchor="${2:-}"; shift ;;
+		--anchor=*) anchor="${1#*=}" ;;
+		--line) line="${2:-}"; shift ;;
+		--line=*) line="${1#*=}" ;;
+		--theme) theme="${2:-}"; shift ;;
+		--theme=*) theme="${1#*=}" ;;
+		--follow) follow="1" ;;
+		-) stdin_mode=1 ;;
+		--) shift; while [[ $# -gt 0 ]]; do paths+=("$1"); shift; done; break ;;
+		-*) echo "prettydoc: unknown option '$1' (try --help)" >&2; exit 2 ;;
+		*) paths+=("$1") ;;
+	esac
+	shift
+done
+
+# Read stdin into a temp file and follow it.
+if [[ "$stdin_mode" -eq 1 ]]; then
+	tmpdir="$(mktemp -d -t prettydoc)"
+	tmp="$tmpdir/stream.md"
+	cat > "$tmp"
+	paths+=("$tmp")
+	follow="1"
+fi
+
+# Pull a trailing #anchor off the first file (e.g. plan.md#step-3).
+if [[ ${#paths[@]} -gt 0 && -z "$anchor" ]]; then
+	first="${paths[0]}"
+	if [[ "$first" == *"#"* ]]; then
+		base="${first%#*}"
+		frag="${first##*#}"
+		if [[ -e "$base" ]]; then
+			paths[0]="$base"
+			anchor="$frag"
+		fi
+	fi
+fi
+
+if [[ ${#paths[@]} -eq 0 ]]; then
+	echo "prettydoc: no files given (try --help)" >&2
+	exit 2
+fi
+
+# Fast path: plain file open with no special options.
+if [[ -z "$tab$window$anchor$line$theme$follow" ]]; then
+	exec open -a "$APP" "${paths[@]}"
+fi
+
+# Otherwise drive the app via the URL scheme.
+url="prettydoc://open?"
+first_param=1
+add() {
+	if [[ $first_param -eq 1 ]]; then first_param=0; else url+="&"; fi
+	url+="$1=$2"
+}
+
+for p in "${paths[@]}"; do
+	[[ -n "$p" ]] || continue
+	add "path" "$(urlencode "$(abspath "$p")")"
+done
+[[ -n "$tab" ]]    && add "tab" "$tab"
+[[ -n "$window" ]] && add "window" "$window"
+[[ -n "$anchor" ]] && add "anchor" "$(urlencode "$anchor")"
+[[ -n "$line" ]]   && add "line" "$line"
+[[ -n "$theme" ]]  && add "theme" "$theme"
+[[ -n "$follow" ]] && add "follow" "1"
+
+exec open "$url"
