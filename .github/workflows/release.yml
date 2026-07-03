@@ -11,6 +11,8 @@ jobs:
   release:
     name: Build & publish
     runs-on: macos-15
+    env:
+      APP_PATH: build/Build/Products/Release/Pretty Doc.app
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +27,7 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build (Release, unsigned)
+      - name: Build (Release)
         run: |
           xcodebuild \
             -project PrettyDoc.xcodeproj \
@@ -35,13 +37,64 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Import Developer ID certificate
+        env:
+          DEVID_CERT_P12_BASE64: ${{ secrets.DEVID_CERT_P12_BASE64 }}
+          DEVID_CERT_PASSWORD: ${{ secrets.DEVID_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -base64 24)"
+          CERT="$RUNNER_TEMP/devid.p12"
+          echo "$DEVID_CERT_P12_BASE64" | base64 --decode > "$CERT"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security import "$CERT" -k "$KEYCHAIN" -P "$DEVID_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN" >/dev/null
+          # Make the temp keychain visible to codesign alongside the defaults.
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | sed 's/["[:space:]]//g')
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | awk -F'"' '/Developer ID Application/{print $2; exit}')"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::No Developer ID Application identity found in the imported certificate."
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          rm -f "$CERT"
+
+      - name: Codesign (hardened runtime)
+        run: |
+          codesign --force --options runtime --timestamp \
+            --keychain "$KEYCHAIN" --sign "$SIGN_IDENTITY" \
+            "$APP_PATH"
+          codesign --verify --strict --verbose=2 "$APP_PATH"
+
+      - name: Notarize & staple
+        env:
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          KEY="$RUNNER_TEMP/asc.p8"
+          echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > "$KEY"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$KEY" --key-id "$ASC_API_KEY_ID" --issuer "$ASC_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          rm -f "$KEY"
+
       - name: Package
         id: package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          APP="build/Build/Products/Release/Pretty Doc.app"
           ZIP="PrettyDoc-${VERSION}.zip"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP"
           SHA=$(shasum -a 256 "$ZIP" | awk '{print $1}')
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
@@ -55,12 +108,8 @@ jobs:
           body: |
             Pretty Doc ${{ steps.package.outputs.version }}
 
-            This build is **unsigned** (no Apple Developer ID). On first launch,
-            right-click the app and choose **Open**, or run:
-
-            ```
-            xattr -dr com.apple.quarantine "/Applications/Pretty Doc.app"
-            ```
+            Signed with a Developer ID and notarized by Apple — it opens without
+            Gatekeeper warnings.
 
             SHA-256 (`${{ steps.package.outputs.zip }}`):
             `${{ steps.package.outputs.sha }}`

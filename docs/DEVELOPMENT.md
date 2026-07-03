@@ -70,16 +70,23 @@ which builds a Release `.app`, zips it, and publishes a GitHub Release with a
 SHA-256 checksum. The Homebrew cask in the
 [tap](https://github.com/erguerra/homebrew-tap) points at that asset.
 
-Builds are currently **unsigned** (no Apple Developer ID). See the README's
-installation notes for the Gatekeeper workaround, and below for enabling
-notarization.
+### Signing & notarization
 
-### Enabling signed + notarized builds
+The release workflow signs the app with a Developer ID and notarizes it with
+Apple, so downloaded builds open without Gatekeeper warnings. It expects these
+repository secrets:
 
-Add these repository secrets and extend the release workflow:
+- `DEVID_CERT_P12_BASE64` / `DEVID_CERT_PASSWORD` - the **Developer ID
+  Application** certificate exported as a `.p12` (base64-encoded) and its password
+- `ASC_API_KEY_P8_BASE64` - App Store Connect API key (`.p8`), base64-encoded
+- `ASC_API_KEY_ID` / `ASC_API_ISSUER_ID` - the key's ID and issuer ID
 
-- `MACOS_CERTIFICATE` / `MACOS_CERTIFICATE_PWD` - base64 Developer ID cert + password
-- `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_APP_PASSWORD` - for `notarytool`
+The workflow imports the certificate into a throwaway keychain, codesigns the
+`.app` with the hardened runtime, submits it with `xcrun notarytool submit
+--wait`, and staples the ticket before zipping. If the secrets are absent the
+signing step fails fast, so unsigned tags won't publish a misleadingly-labeled
+release.
 
-Then codesign the `.app` with the Developer ID, submit with
-`xcrun notarytool submit --wait`, and `xcrun stapler staple` before zipping.
+To sign locally instead, create the notary credentials once with
+`xcrun notarytool store-credentials`, then codesign, `notarytool submit
+--keychain-profile <name> --wait`, and `stapler staple`.
